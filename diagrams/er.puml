@@ -1,0 +1,89 @@
+@startuml
+title ER-диаграмма экосистемы «Тёплый дом»
+
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #EAF3FA
+    BorderColor #1168BD
+}
+
+package "Device Service — Device DB" {
+    entity "DeviceType" as DEVICE_TYPE {
+        * code : VARCHAR(50) <<PK>>
+        --
+        * name : VARCHAR(100)
+        description : TEXT
+    }
+
+    entity "Device" as DEVICE {
+        * id : UUID <<PK>>
+        --
+        * type_code : VARCHAR(50) <<FK>>
+        * name : VARCHAR(100)
+        * serial_number : VARCHAR(100) <<UNIQUE>>
+        * location : VARCHAR(100)
+        * status : VARCHAR(30)
+        * created_at : TIMESTAMPTZ
+        * updated_at : TIMESTAMPTZ
+    }
+}
+
+package "Temperature Service — Temperature DB" {
+    entity "TelemetryData" as TELEMETRY_DATA {
+        * id : UUID <<PK>>
+        --
+        * device_id : UUID <<logical FK>>
+        * value : DECIMAL(10,2)
+        * unit : VARCHAR(20)
+        * status : VARCHAR(30)
+        * measured_at : TIMESTAMPTZ
+        * received_at : TIMESTAMPTZ
+    }
+}
+
+package "Heating Service — Heating DB" {
+    entity "HeatingCommand" as HEATING_COMMAND {
+        * id : UUID <<PK>>
+        --
+        * command_id : UUID <<UNIQUE>>
+        * device_id : UUID <<logical FK>>
+        * action : VARCHAR(10)
+        * status : VARCHAR(20)
+        result : JSONB
+        * created_at : TIMESTAMPTZ
+        completed_at : TIMESTAMPTZ
+    }
+
+    entity "HeatingState" as HEATING_STATE {
+        * device_id : UUID <<PK, logical FK>>
+        --
+        * state : VARCHAR(10)
+        * updated_at : TIMESTAMPTZ
+    }
+}
+
+DEVICE_TYPE ||--o{ DEVICE : "type_code"
+DEVICE ||--o{ TELEMETRY_DATA : "device_id"
+DEVICE ||--o{ HEATING_COMMAND : "device_id"
+DEVICE ||--o| HEATING_STATE : "device_id"
+
+note bottom of TELEMETRY_DATA
+Одно устройство имеет ноль или много записей телеметрии.
+device_id — логическая ссылка на Device без физического FK:
+сущности находятся в базах разных сервисов.
+end note
+
+note bottom of HEATING_COMMAND
+Одно устройство имеет ноль или много команд.
+command_id обеспечивает идемпотентность.
+action: ON или OFF.
+status: RECEIVED, SUCCEEDED или FAILED.
+end note
+
+note bottom of HEATING_STATE
+Текущее состояние отопительного устройства.
+У устройства может быть не более одной записи состояния.
+state: ON или OFF.
+end note
+
+@enduml
