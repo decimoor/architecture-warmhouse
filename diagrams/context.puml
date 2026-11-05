@@ -1,0 +1,15 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Контекст существующего монолитного приложения «Тёплый дом»
+
+Person(client, "API-клиент", "Управляет реестром датчиков и запрашивает текущую температуру")
+System(warmhouse, "Монолитное приложение «Тёплый дом»", "Предоставляет REST API для управления датчиками и мониторинга температуры")
+System_Ext(temperatureApi, "temperature-api", "Внешний источник текущих показаний температуры")
+
+Rel(client, warmhouse, "Выполняет CRUD-операции с датчиками и запрашивает температуру", "HTTP/REST")
+Rel(warmhouse, temperatureApi, "Запрашивает температуру по идентификатору датчика или местоположению", "HTTP")
+
+@enduml
