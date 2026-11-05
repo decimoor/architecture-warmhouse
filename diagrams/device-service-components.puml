@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Components — Device Service
+
+Container(apiGateway, "API Gateway", "Nginx", "Маршрутизирует запросы управления устройствами")
+
+Container_Boundary(deviceService, "Device Service") {
+    Component(deviceApi, "Device API", "Go, Gin", "Обрабатывает REST-запросы и валидирует входные данные")
+    Component(commandHandler, "Device Command Handler", "Go", "Выполняет создание, изменение и удаление устройств")
+    Component(queryHandler, "Device Query Handler", "Go", "Получает устройство и список устройств")
+    Component(deviceRepository, "Device Repository", "Go, pgx", "Инкапсулирует доступ к метаданным устройств")
+    Component(eventPublisher, "Device Event Publisher", "Go", "Публикует события DeviceChanged")
+}
+
+ContainerDb(deviceDb, "Device DB", "PostgreSQL", "Метаданные устройств")
+ContainerQueue(eventBus, "Event Bus", "Kafka", "Доменные события")
+
+Rel(apiGateway, deviceApi, "Передаёт запросы /api/v1/devices", "HTTP/REST")
+Rel(deviceApi, commandHandler, "Передаёт команды создания, изменения и удаления")
+Rel(deviceApi, queryHandler, "Передаёт запросы чтения")
+Rel(commandHandler, deviceRepository, "Сохраняет изменения")
+Rel(queryHandler, deviceRepository, "Читает устройства")
+Rel(deviceRepository, deviceDb, "Выполняет SQL-запросы")
+Rel(commandHandler, eventPublisher, "Передаёт изменённое устройство")
+Rel(eventPublisher, eventBus, "Публикует DeviceChanged", "Kafka")
+
+@enduml

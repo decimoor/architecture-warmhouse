@@ -65,15 +65,17 @@
 
 **Диаграмма контейнеров (Containers)**
 
-Добавьте диаграмму.
+[Диаграмма контейнеров микросервисной архитектуры](diagrams/containers.puml)
 
 **Диаграмма компонентов (Components)**
 
-Добавьте диаграмму для каждого из выделенных микросервисов.
+- [Device Service](diagrams/device-service-components.puml)
+- [Temperature Service](diagrams/temperature-service-components.puml)
+- [Heating Service](diagrams/heating-service-components.puml)
 
 **Диаграмма кода (Code)**
 
-Добавьте одну диаграмму или несколько.
+[Диаграмма последовательности выполнения команды управления отоплением](diagrams/heating-command-sequence.puml)
 
 # Задание 3. Разработка ER-диаграммы
 

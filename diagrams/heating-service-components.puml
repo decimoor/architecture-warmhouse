@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Components — Heating Service
+
+Container(apiGateway, "API Gateway", "Nginx", "Маршрутизирует команды управления отоплением")
+System_Ext(heatingEquipment, "Отопительное оборудование", "Выполняет команды")
+ContainerQueue(eventBus, "Event Bus", "Kafka", "Доменные события")
+ContainerDb(heatingDb, "Heating DB", "PostgreSQL", "Команды, состояния и проекция устройств")
+
+Container_Boundary(heatingService, "Heating Service") {
+    Component(api, "Heating API", "Go, Gin", "Принимает команды и возвращает состояние отопления")
+    Component(commandHandler, "Heating Command Handler", "Go", "Проверяет команду и координирует её выполнение")
+    Component(stateManager, "Heating State Manager", "Go", "Управляет жизненным циклом команды и состоянием отопления")
+    Component(heatingRepository, "Heating Repository", "Go, pgx", "Сохраняет команды и состояния")
+    Component(equipmentAdapter, "Heating Equipment Adapter", "Go", "Преобразует доменные команды в вызовы оборудования")
+    Component(deviceConsumer, "Device Events Consumer", "Go", "Обрабатывает DeviceChanged")
+    Component(deviceProjection, "Device Projection Repository", "Go, pgx", "Хранит метаданные отопительных устройств")
+}
+
+Rel(apiGateway, api, "Передаёт запросы /api/v1/heating", "HTTP/REST")
+Rel(api, commandHandler, "Передаёт команду включения или выключения")
+Rel(commandHandler, deviceProjection, "Проверяет наличие и тип устройства")
+Rel(commandHandler, heatingRepository, "Регистрирует команду")
+Rel(commandHandler, stateManager, "Запускает выполнение команды")
+Rel(stateManager, equipmentAdapter, "Передаёт доменную команду")
+Rel(equipmentAdapter, heatingEquipment, "Включает или выключает отопление")
+Rel(stateManager, heatingRepository, "Фиксирует результат и состояние")
+Rel(heatingRepository, heatingDb, "Выполняет SQL-запросы")
+Rel(eventBus, deviceConsumer, "Доставляет DeviceChanged", "Kafka")
+Rel(deviceConsumer, deviceProjection, "Обновляет локальную проекцию")
+Rel(deviceProjection, heatingDb, "Выполняет SQL-запросы")
+
+@enduml

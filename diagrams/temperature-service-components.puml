@@ -1,0 +1,36 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Components — Temperature Service
+
+Container(apiGateway, "API Gateway", "Nginx", "Маршрутизирует запросы мониторинга температуры")
+System_Ext(temperatureApi, "temperature-api", "Внешний источник показаний")
+ContainerQueue(eventBus, "Event Bus", "Kafka", "Доменные события")
+ContainerDb(temperatureDb, "Temperature DB", "PostgreSQL", "Показания и проекция устройств")
+
+Container_Boundary(temperatureService, "Temperature Service") {
+    Component(api, "Temperature API", "Go, Gin", "Обрабатывает запросы текущей температуры")
+    Component(monitoringService, "Temperature Query Service", "Go", "Координирует получение и сохранение показаний")
+    Component(temperatureClient, "Temperature API Client", "Go, net/http", "Получает показания из внешнего API")
+    Component(readingRepository, "Reading Repository", "Go, pgx", "Сохраняет и читает показания температуры")
+    Component(deviceConsumer, "Device Events Consumer", "Go", "Обрабатывает DeviceChanged")
+    Component(deviceProjection, "Device Projection Repository", "Go, pgx", "Хранит локальные метаданные температурных датчиков")
+    Component(eventPublisher, "Temperature Event Publisher", "Go", "Публикует TemperatureMeasured")
+}
+
+Rel(apiGateway, api, "Передаёт запросы /api/v1/temperatures", "HTTP/REST")
+Rel(api, monitoringService, "Передаёт идентификатор датчика или местоположение")
+Rel(monitoringService, deviceProjection, "Определяет датчик и местоположение")
+Rel(monitoringService, temperatureClient, "Запрашивает актуальное показание")
+Rel(temperatureClient, temperatureApi, "Выполняет запрос температуры", "HTTP")
+Rel(monitoringService, readingRepository, "Сохраняет показание")
+Rel(readingRepository, temperatureDb, "Выполняет SQL-запросы")
+Rel(monitoringService, eventPublisher, "Передаёт новое показание")
+Rel(eventPublisher, eventBus, "Публикует TemperatureMeasured", "Kafka")
+Rel(eventBus, deviceConsumer, "Доставляет DeviceChanged", "Kafka")
+Rel(deviceConsumer, deviceProjection, "Обновляет локальную проекцию")
+Rel(deviceProjection, temperatureDb, "Выполняет SQL-запросы")
+
+@enduml
