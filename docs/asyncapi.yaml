@@ -1,0 +1,155 @@
+asyncapi: 2.6.0
+info:
+  title: Тёплый дом — события микросервисов
+  version: 1.0.0
+  description: |
+    Асинхронные контракты Kafka. DeviceChanged синхронизирует локальные проекции
+    устройств в Temperature Service и Heating Service. TemperatureMeasured сообщает
+    экосистеме о новом показании температуры.
+defaultContentType: application/json
+servers:
+  kafka:
+    url: kafka:9092
+    protocol: kafka
+    description: Внутренний кластер Kafka
+channels:
+  device.events:
+    description: События создания и изменения устройств
+    publish:
+      operationId: publishDeviceChanged
+      summary: Device Service публикует изменение устройства
+      message:
+        $ref: '#/components/messages/DeviceChanged'
+    subscribe:
+      operationId: consumeDeviceChanged
+      summary: Temperature Service и Heating Service обновляют локальные проекции устройств
+      message:
+        $ref: '#/components/messages/DeviceChanged'
+  temperature.events:
+    description: События новых показаний температуры
+    publish:
+      operationId: publishTemperatureMeasured
+      summary: Temperature Service публикует новое показание
+      message:
+        $ref: '#/components/messages/TemperatureMeasured'
+components:
+  messages:
+    DeviceChanged:
+      name: DeviceChanged
+      title: Устройство создано или изменено
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceChangedEvent'
+      examples:
+        - name: sensorUpdated
+          summary: Температурный датчик обновлён
+          payload:
+            eventId: 061d44e5-7e3b-46c9-a3bc-d6db31f4c3d1
+            eventType: DeviceChanged
+            occurredAt: '2026-11-06T09:45:00Z'
+            data:
+              deviceId: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+              typeCode: temperature_sensor
+              name: Датчик в гостиной
+              serialNumber: TS-LIV-001
+              location: Гостиная
+              status: inactive
+              updatedAt: '2026-11-06T09:45:00Z'
+    TemperatureMeasured:
+      name: TemperatureMeasured
+      title: Получено новое показание температуры
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TemperatureMeasuredEvent'
+      examples:
+        - name: livingRoomTemperature
+          summary: Температура в гостиной
+          payload:
+            eventId: f827c48f-e31f-46ae-b4fc-e1dd192bc837
+            eventType: TemperatureMeasured
+            occurredAt: '2026-11-06T09:50:01Z'
+            data:
+              deviceId: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+              location: Гостиная
+              value: 22.4
+              unit: °C
+              status: active
+              measuredAt: '2026-11-06T09:50:00Z'
+  schemas:
+    DeviceChangedEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [DeviceChanged]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/DeviceChangedData'
+    DeviceChangedData:
+      type: object
+      additionalProperties: false
+      required: [deviceId, typeCode, name, serialNumber, location, status, updatedAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        typeCode:
+          type: string
+          enum: [temperature_sensor, heating_controller]
+        name:
+          type: string
+        serialNumber:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, offline]
+        updatedAt:
+          type: string
+          format: date-time
+    TemperatureMeasuredEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventType, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum: [TemperatureMeasured]
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          $ref: '#/components/schemas/TemperatureMeasuredData'
+    TemperatureMeasuredData:
+      type: object
+      additionalProperties: false
+      required: [deviceId, location, value, unit, status, measuredAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        location:
+          type: string
+        value:
+          type: number
+          format: double
+        unit:
+          type: string
+          example: °C
+        status:
+          type: string
+          enum: [active, inactive, offline]
+        measuredAt:
+          type: string
+          format: date-time
