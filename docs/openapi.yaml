@@ -1,0 +1,425 @@
+openapi: 3.0.3
+info:
+  title: Тёплый дом — REST API
+  version: 1.0.0
+  description: |
+    Синхронный API экосистемы «Тёплый дом». Запросы клиента проходят через API Gateway
+    и маршрутизируются в Device Service, Temperature Service и Heating Service.
+servers:
+  - url: http://localhost:8080
+    description: API Gateway
+tags:
+  - name: Devices
+    description: Управление реестром устройств
+  - name: Temperature
+    description: Мониторинг температуры
+  - name: Heating
+    description: Управление отоплением
+paths:
+  /api/v1/devices/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Получить информацию об устройстве
+      operationId: getDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Устройство найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                temperatureSensor:
+                  summary: Температурный датчик
+                  value:
+                    id: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+                    typeCode: temperature_sensor
+                    name: Датчик в гостиной
+                    serialNumber: TS-LIV-001
+                    location: Гостиная
+                    status: active
+                    createdAt: '2026-11-01T10:00:00Z'
+                    updatedAt: '2026-11-06T09:30:00Z'
+        '404':
+          description: Устройство не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    code: DEVICE_NOT_FOUND
+                    message: Устройство 4f89f87e-0d70-4f37-92ca-53f35f584ea1 не найдено
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/devices/{deviceId}/status:
+    patch:
+      tags: [Devices]
+      summary: Обновить состояние устройства
+      description: Изменяет состояние устройства и публикует событие DeviceChanged.
+      operationId: updateDeviceStatus
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceStatusUpdate'
+            examples:
+              deactivate:
+                summary: Отключение устройства
+                value:
+                  status: inactive
+      responses:
+        '200':
+          description: Состояние обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              examples:
+                updated:
+                  value:
+                    id: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+                    typeCode: temperature_sensor
+                    name: Датчик в гостиной
+                    serialNumber: TS-LIV-001
+                    location: Гостиная
+                    status: inactive
+                    createdAt: '2026-11-01T10:00:00Z'
+                    updatedAt: '2026-11-06T09:45:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Устройство не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    code: DEVICE_NOT_FOUND
+                    message: Устройство не найдено
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/temperatures/{deviceId}:
+    get:
+      tags: [Temperature]
+      summary: Получить текущую температуру датчика
+      description: |
+        Возвращает актуальное показание, полученное Temperature Service из temperature-api.
+        Идентификатор датчика проверяется по локальной проекции устройств.
+      operationId: getCurrentTemperature
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Текущее показание получено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemperatureReading'
+              examples:
+                current:
+                  value:
+                    deviceId: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+                    location: Гостиная
+                    value: 22.4
+                    unit: °C
+                    status: active
+                    measuredAt: '2026-11-06T09:50:00Z'
+        '404':
+          description: Температурный датчик не найден в локальной проекции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    code: TEMPERATURE_SENSOR_NOT_FOUND
+                    message: Температурный датчик не найден
+        '502':
+          description: Внешний temperature-api недоступен или вернул ошибку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sourceUnavailable:
+                  value:
+                    code: TEMPERATURE_SOURCE_UNAVAILABLE
+                    message: Не удалось получить показание из temperature-api
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/heating/commands:
+    post:
+      tags: [Heating]
+      summary: Отправить команду отопительному устройству
+      description: |
+        Синхронно включает или выключает отопление. Поле commandId является ключом
+        идемпотентности: повтор запроса с тем же commandId и телом возвращает сохранённый результат.
+      operationId: createHeatingCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeatingCommandRequest'
+            examples:
+              turnOn:
+                summary: Включить отопление
+                value:
+                  commandId: a55c153d-b4f1-4f5b-9f76-f0a29052d201
+                  deviceId: c8a155ed-1f2f-4e3c-9d54-e28f55e63520
+                  action: ON
+      responses:
+        '200':
+          description: Команда выполнена или результат ранее обработанной команды получен повторно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingCommand'
+              examples:
+                succeeded:
+                  value:
+                    commandId: a55c153d-b4f1-4f5b-9f76-f0a29052d201
+                    deviceId: c8a155ed-1f2f-4e3c-9d54-e28f55e63520
+                    action: ON
+                    status: SUCCEEDED
+                    result: Отопление включено
+                    createdAt: '2026-11-06T09:55:00Z'
+                    completedAt: '2026-11-06T09:55:01Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Отопительное устройство не найдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    code: HEATING_DEVICE_NOT_FOUND
+                    message: Отопительное устройство не найдено
+        '409':
+          description: Устройство неактивно либо commandId уже использован с другими параметрами
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                conflict:
+                  value:
+                    code: HEATING_COMMAND_CONFLICT
+                    message: Команда с таким commandId уже существует и имеет другие параметры
+        '502':
+          description: Оборудование не выполнило команду; ошибка сохранена как результат команды
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingCommand'
+              examples:
+                failed:
+                  value:
+                    commandId: a55c153d-b4f1-4f5b-9f76-f0a29052d201
+                    deviceId: c8a155ed-1f2f-4e3c-9d54-e28f55e63520
+                    action: ON
+                    status: FAILED
+                    result: Оборудование не ответило в течение заданного времени
+                    createdAt: '2026-11-06T09:55:00Z'
+                    completedAt: '2026-11-06T09:55:10Z'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/heating/commands/{commandId}:
+    get:
+      tags: [Heating]
+      summary: Получить состояние и результат команды отопления
+      operationId: getHeatingCommand
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Команда найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingCommand'
+              examples:
+                succeeded:
+                  value:
+                    commandId: a55c153d-b4f1-4f5b-9f76-f0a29052d201
+                    deviceId: c8a155ed-1f2f-4e3c-9d54-e28f55e63520
+                    action: ON
+                    status: SUCCEEDED
+                    result: Отопление включено
+                    createdAt: '2026-11-06T09:55:00Z'
+                    completedAt: '2026-11-06T09:55:01Z'
+        '404':
+          description: Команда не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  value:
+                    code: HEATING_COMMAND_NOT_FOUND
+                    message: Команда отопления не найдена
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      description: Уникальный идентификатор устройства
+      schema:
+        type: string
+        format: uuid
+      example: 4f89f87e-0d70-4f37-92ca-53f35f584ea1
+    CommandId:
+      name: commandId
+      in: path
+      required: true
+      description: Клиентский идентификатор команды и ключ идемпотентности
+      schema:
+        type: string
+        format: uuid
+      example: a55c153d-b4f1-4f5b-9f76-f0a29052d201
+  responses:
+    BadRequest:
+      description: Ошибка валидации запроса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalid:
+              value:
+                code: INVALID_REQUEST
+                message: Поле action должно иметь значение ON или OFF
+    InternalServerError:
+      description: Внутренняя ошибка сервиса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internal:
+              value:
+                code: INTERNAL_ERROR
+                message: Внутренняя ошибка сервиса
+  schemas:
+    Device:
+      type: object
+      required: [id, typeCode, name, serialNumber, location, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        typeCode:
+          type: string
+          enum: [temperature_sensor, heating_controller]
+        name:
+          type: string
+        serialNumber:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, offline]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    DeviceStatusUpdate:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, inactive, offline]
+    TemperatureReading:
+      type: object
+      required: [deviceId, location, value, unit, status, measuredAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        location:
+          type: string
+        value:
+          type: number
+          format: double
+        unit:
+          type: string
+          example: °C
+        status:
+          type: string
+          enum: [active, inactive, offline]
+        measuredAt:
+          type: string
+          format: date-time
+    HeatingCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [commandId, deviceId, action]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+          description: Ключ идемпотентности, генерируемый клиентом
+        deviceId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [ON, OFF]
+    HeatingCommand:
+      type: object
+      required: [commandId, deviceId, action, status, createdAt]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [ON, OFF]
+        status:
+          type: string
+          enum: [RECEIVED, SUCCEEDED, FAILED]
+        result:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+        message:
+          type: string
+          description: Описание ошибки для разработчика клиента

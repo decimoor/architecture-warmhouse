@@ -1,0 +1,60 @@
+@startuml
+title Code level — выполнение команды управления отоплением
+
+skinparam sequence {
+    ArrowColor #1168BD
+    LifeLineBorderColor #1168BD
+    ParticipantBorderColor #1168BD
+    ParticipantBackgroundColor #EAF3FA
+}
+
+actor "Пользователь" as User
+participant "Heating API" as API
+participant "HeatingCommandHandler" as Handler
+participant "DeviceProjectionRepository" as Devices
+participant "HeatingStateManager" as State
+participant "HeatingEquipmentAdapter" as Adapter
+database "Heating DB" as DB
+participant "Отопительное\nоборудование" as Equipment
+
+User -> API : POST /api/v1/heating/commands\n{commandId, deviceId, action}
+API -> Handler : Execute(command)
+Handler -> Devices : FindHeatingDevice(deviceId)
+Devices -> DB : SELECT id, type, active\nFROM device_projection\nWHERE id = :deviceId
+DB --> Devices : Метаданные устройства
+Devices --> Handler : Устройство или «не найдено»
+
+alt Устройство не найдено, неактивно или не управляет отоплением
+    Handler --> API : Ошибка валидации команды
+    API --> User : 404 Not Found или 409 Conflict
+else Устройство допускает команду
+    Handler -> DB : INSERT heating_command\n(commandId, deviceId, action, RECEIVED)\nON CONFLICT commandId DO NOTHING
+    DB --> Handler : Результат вставки
+
+    alt Команда с commandId уже существует
+        Handler -> DB : SELECT status, result\nFROM heating_command\nWHERE commandId = :commandId
+        DB --> Handler : Сохранённый результат
+        Handler --> API : Результат ранее обработанной команды
+        API --> User : 200 OK\n{commandId, status, result}
+    else Новая команда
+        Handler -> State : Execute(command)
+        State -> Adapter : SetHeating(deviceId, action)
+        Adapter -> Equipment : Включить или выключить отопление
+
+        alt Оборудование подтвердило выполнение
+            Equipment --> Adapter : Подтверждение и состояние
+            Adapter --> State : Результат выполнения
+            State -> DB : UPDATE heating_command\nSET status = 'SUCCEEDED', result = :state\nWHERE commandId = :commandId
+            Handler --> API : Команда выполнена
+            API --> User : 200 OK\n{commandId, status: SUCCEEDED}
+        else Ошибка оборудования или тайм-аут
+            Equipment --> Adapter : Ошибка или отсутствие ответа
+            Adapter --> State : Ошибка выполнения
+            State -> DB : UPDATE heating_command\nSET status = 'FAILED', result = :error\nWHERE commandId = :commandId
+            Handler --> API : Команда не выполнена
+            API --> User : 502 Bad Gateway\n{commandId, status: FAILED}
+        end
+    end
+end
+
+@enduml

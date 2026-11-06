@@ -1,0 +1,45 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Containers — экосистема «Тёплый дом»
+
+Person(user, "Пользователь", "Управляет датчиками и отоплением, просматривает температуру")
+
+System_Boundary(smartHome, "Экосистема «Тёплый дом»") {
+    Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа и маршрутизация запросов к сервисам")
+
+    Container(deviceService, "Device Service", "Go", "Управляет реестром датчиков и отопительных устройств")
+    ContainerDb(deviceDb, "Device DB", "PostgreSQL", "Метаданные устройств; принадлежит только Device Service")
+
+    Container(temperatureService, "Temperature Service", "Go", "Предоставляет текущие показания температуры")
+    ContainerDb(temperatureDb, "Temperature DB", "PostgreSQL", "Показания температуры и локальная проекция устройств")
+
+    Container(heatingService, "Heating Service", "Go", "Выполняет команды управления отоплением и хранит их состояние")
+    ContainerDb(heatingDb, "Heating DB", "PostgreSQL", "Команды, состояния отопления и локальная проекция устройств")
+
+    ContainerQueue(eventBus, "Event Bus", "Kafka", "Асинхронная доставка доменных событий")
+}
+
+System_Ext(temperatureApi, "temperature-api", "Внешний источник текущих показаний температуры")
+System_Ext(heatingEquipment, "Отопительное оборудование", "Выполняет команды включения и выключения")
+
+Rel(user, apiGateway, "Выполняет команды и запросы", "HTTPS")
+Rel(apiGateway, deviceService, "Маршрутизирует /api/v1/devices", "HTTP/REST")
+Rel(apiGateway, temperatureService, "Маршрутизирует /api/v1/temperatures", "HTTP/REST")
+Rel(apiGateway, heatingService, "Маршрутизирует /api/v1/heating", "HTTP/REST")
+
+Rel(deviceService, deviceDb, "Читает и изменяет метаданные устройств", "SQL")
+Rel(temperatureService, temperatureDb, "Сохраняет показания и читает проекцию устройств", "SQL")
+Rel(heatingService, heatingDb, "Сохраняет команды и состояния, читает проекцию устройств", "SQL")
+
+Rel(deviceService, eventBus, "Публикует DeviceChanged", "Kafka")
+Rel(eventBus, temperatureService, "Доставляет DeviceChanged для проекции устройств", "Kafka")
+Rel(eventBus, heatingService, "Доставляет DeviceChanged для проекции устройств", "Kafka")
+
+Rel(temperatureService, temperatureApi, "Получает текущую температуру", "HTTP")
+Rel(temperatureService, eventBus, "Публикует TemperatureMeasured", "Kafka")
+Rel(heatingService, heatingEquipment, "Передаёт команды включения и выключения")
+
+@enduml
